@@ -53,9 +53,15 @@ test("imports actual reports, handles account selection, navigation, persistence
   const ikeStats = stats(accounts.find((a) => a.label === "IKE"));
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
+  await page.route("**/api/market", (route) =>
+    route.fulfill({ status: 503, json: { error: "Offline test" } }),
+  );
   await page.goto("/");
   await page
     .getByRole("button", { name: "Wczytaj cztery załączone raporty" })
+    .click();
+  await page
+    .getByRole("button", { name: "Raport / koszt historyczny", exact: true })
     .click();
   await expect(
     page.getByRole("heading", { name: "Historia kapitału" }),
@@ -64,14 +70,12 @@ test("imports actual reports, handles account selection, navigation, persistence
   await expect(page.locator(".stat-value").first()).toHaveText(
     formatPLN(totals.value),
   );
-  await page
-    .getByRole("button", { name: "Wycena rynkowa", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Ceny CSV", exact: true }).click();
   await expect(page.locator(".market-warning")).toContainText(
     "Dodaj notowania CSV",
   );
   await page
-    .getByRole("button", { name: "Koszt historyczny", exact: true })
+    .getByRole("button", { name: "Raport / koszt historyczny", exact: true })
     .click();
   await page.getByRole("button", { name: "%", exact: true }).click();
   await expect(page.locator(".chart-note")).toContainText(
@@ -98,6 +102,9 @@ test("imports actual reports, handles account selection, navigation, persistence
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.getByRole("button", { name: "Zamknij szczegóły" }).click();
   await page.reload();
+  await page
+    .getByRole("button", { name: "Raport / koszt historyczny", exact: true })
+    .click();
   await expect(page.locator(".account-chip")).toHaveCount(4);
   await page.getByRole("button", { name: "Importuj raport" }).click();
   await page

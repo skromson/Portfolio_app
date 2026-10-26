@@ -53,6 +53,9 @@ import {
 import "@fontsource-variable/dm-sans";
 import "@fontsource-variable/manrope";
 import "./style.css";
+import { onlinePortfolio, windowHistory } from "./online.js";
+import { useMarketData } from "./useMarketData.js";
+import MarketSettings from "./MarketSettings.jsx";
 const palette = [
   "#27654f",
   "#7aa58a",
@@ -80,7 +83,9 @@ const day = (x) =>
         year: "numeric",
       })
     : "—";
-const money = (v, c = "PLN") => `${num(v)} ${c === "PLN" ? "zł" : c}`;
+const money = (v, c = "PLN") =>
+  v == null ? "—" : `${num(v)} ${c === "PLN" ? "zł" : c}`;
+const timestamp = (x) => (x ? new Date(x).toLocaleString("pl-PL") : "—");
 function readLocal() {
   try {
     const v = JSON.parse(localStorage.getItem("folio-v1") || "[]");
@@ -96,7 +101,7 @@ function App() {
     [modal, setModal] = useState(null),
     [base, setBase] = useState("PLN"),
     [rateOverrides, setRateOverrides] = useState({}),
-    [period, setPeriod] = useState("ALL"),
+    [period, setPeriod] = useState("6"),
     [chartMode, setChartMode] = useState("value"),
     [search, setSearch] = useState(""),
     [flowFilter, setFlowFilter] = useState("all"),
@@ -104,11 +109,19 @@ function App() {
     [importErrors, setImportErrors] = useState([]),
     [busy, setBusy] = useState(false),
     [drag, setDrag] = useState(false),
-    [detail, setDetail] = useState(null),
+    [detailSelection, setDetail] = useState(null),
     [page, setPage] = useState(1),
-    [valuation, setValuation] = useState("cost"),
+    [valuation, setValuation] = useState("market"),
+    [symbols, setSymbols] = useState(() => {
+      try {
+        return JSON.parse(localStorage.getItem("folio-symbols-v1") || "{}");
+      } catch {
+        return {};
+      }
+    }),
     [quotes, setQuotes] = useState([]),
     [quoteError, setQuoteError] = useState("");
+  const detail = detailSelection;
   useEffect(() => {
     if (!modal && !detail) return;
     const previous = document.activeElement;
@@ -148,12 +161,31 @@ function App() {
   const quoteInput = useRef();
   const inferred = useMemo(() => inferRates(accounts), [accounts]);
   const rates = { ...inferred, ...rateOverrides };
-  const chosen = accounts.filter((a) => selected.includes(a.id));
-  const p = useMemo(
+  const chosen = useMemo(
+    () => accounts.filter((a) => selected.includes(a.id)),
+    [accounts, selected],
+  );
+  const remote = useMarketData(accounts, symbols);
+  const snapshot = useMemo(
     () => portfolio(chosen, rates, base),
     [chosen, base, JSON.stringify(rates)],
   );
+  const online = useMemo(
+    () => onlinePortfolio(chosen, remote.data, base),
+    [chosen, base, remote.data],
+  );
+  const p = valuation === "market" ? online : snapshot;
+  const onlineMode = valuation === "market";
   const t = p.totals;
+  useEffect(() => {
+    if (detailSelection) {
+      const updated = p.holdings.find(
+        (h) => h.ticker === detailSelection.ticker,
+      );
+      if (updated) setDetail(updated);
+      else setDetail(null);
+    }
+  }, [remote.data, valuation, base, selected.join("|")]);
   const persist = (as) => {
     setAccounts(as);
     try {
@@ -197,7 +229,10 @@ function App() {
     setBusy(true);
     try {
       const res = await fetch("/local-reports/manifest.json");
-      if (!res.ok || !res.headers.get("content-type")?.includes("application/json"))
+      if (
+        !res.ok ||
+        !res.headers.get("content-type")?.includes("application/json")
+      )
         throw new Error(
           "Załączniki nie są dostępne w tej instalacji. Wybierz własne pliki XTB.",
         );
@@ -223,15 +258,21 @@ function App() {
   };
   const market = useMemo(
     () => marketHistory(chosen, rates, base, quotes),
-    [p, quotes],
+    [accounts, selected.join("|"), base, JSON.stringify(rates), quotes],
   );
   const history = useMemo(() => {
-    const data = valuation === "market" ? market : p.history;
+    const data =
+      valuation === "market"
+        ? online.history
+        : valuation === "csv"
+          ? market
+          : snapshot.history;
+    if (valuation === "market") return windowHistory(data, period);
     if (!data.length || period === "ALL") return data;
     const cutoff = new Date(data.at(-1).day);
     cutoff.setUTCMonth(cutoff.getUTCMonth() - Number(period));
     return data.filter((d) => new Date(d.day) >= cutoff);
-  }, [p.history, market, period, valuation]);
+  }, [snapshot.history, online.history, market, period, valuation]);
   const operations = chosen
     .flatMap((a) =>
       a.operations.map((o) => ({
@@ -367,7 +408,11 @@ function App() {
             <strong>{tabs.find((x) => x[0] === view)?.[1]}</strong>
           </div>
           <div className="top-status">
-            <i /> Dane z raportów XTB <span className="avatar">MP</span>
+            <i />{" "}
+            {onlineMode
+              ? "Notowania online • Yahoo Finance"
+              : "Dane z raportów XTB"}{" "}
+            <span className="avatar">MP</span>
           </div>
         </header>
         <div className="content">
@@ -492,6 +537,56 @@ function App() {
               </label>
             </div>
           </section>
+          {accounts.length > 0 && (
+            <section className="market-toolbar">
+              <div className="segmented">
+                <button
+                  className={onlineMode ? "on" : ""}
+                  onClick={() => setValuation("market")}
+                >
+                  Notowania online
+                </button>
+                <button
+                  className={valuation === "cost" ? "on" : ""}
+                  onClick={() => setValuation("cost")}
+                >
+                  Raport / koszt historyczny
+                </button>
+                <button
+                  className={valuation === "csv" ? "on" : ""}
+                  onClick={() => setValuation("csv")}
+                >
+                  Ceny CSV
+                </button>
+              </div>
+              <button
+                className="secondary"
+                disabled={remote.loading}
+                onClick={remote.refresh}
+              >
+                {remote.loading ? "Pobieranie…" : "Odśwież notowania"}
+              </button>
+              <p role="status">
+                {remote.data
+                  ? `Pobrano: ${timestamp(remote.data.fetchedAt)}. Automatyczne odświeżanie co 60 s.`
+                  : "Pobieramy ceny akcji i kursy FX…"}{" "}
+                Dostawca może publikować opóźnione ceny.
+              </p>
+              {(remote.error || remote.stale) && (
+                <p className="negative" role="alert">
+                  {remote.error ||
+                    "Notowania nie zostały odświeżone od ponad 2,5 minuty."}{" "}
+                  {remote.data
+                    ? "Widać ostatnio pobrane dane, a nie nowe ceny."
+                    : ""}
+                </p>
+              )}
+              <small>
+                Wyceniamy pozycje z ostatnio wgranych raportów. Nowe transakcje
+                XTB wymagają ponownego importu.
+              </small>
+            </section>
+          )}
           {!accounts.length ? (
             <section className="empty-hero panel">
               <div className="empty-icon">
@@ -540,24 +635,49 @@ function App() {
           ) : p.missing.length ? (
             <div className="panel empty-state">
               <Info />
-              <h2>Uzupełnij kursy walut</h2>
-              <p>
-                Do połączenia tych kont w {base} potrzebny jest kurs:{" "}
-                {[...new Set([...p.missing, base])]
-                  .filter((c) => !rates[c])
-                  .join(", ")}
-                .
-              </p>
-              <button className="primary" onClick={() => setModal("settings")}>
-                Ustaw kursy przeliczeniowe
-              </button>
+              <h2>
+                {onlineMode
+                  ? remote.loading
+                    ? "Pobieranie notowań…"
+                    : "Brak pełnej wyceny online"
+                  : "Uzupełnij kursy walut"}
+              </h2>
+              {onlineMode ? (
+                <>
+                  <p>{remote.error || p.missing.join(" • ")}</p>
+                  <p>
+                    Możesz zmienić symbole w ustawieniach albo wybrać widok
+                    raportu. Nie zastępujemy brakującej ceny zerem.
+                  </p>
+                  <button
+                    className="primary"
+                    onClick={() => setModal("settings")}
+                  >
+                    Symbole i ustawienia
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p>
+                    Do widoku {base} brakuje kursów: {p.missing.join(", ")}.
+                  </p>
+                  <button
+                    className="primary"
+                    onClick={() => setModal("settings")}
+                  >
+                    Ustaw kursy referencyjne
+                  </button>
+                </>
+              )}
             </div>
           ) : (
             <>
               <div className="report-line">
                 <span>
                   <span className="status-dot" />
-                  Stan raportów: {day(reportDate)}
+                  {onlineMode
+                    ? `Bieżąca wycena pozycji • raport z ${day(reportDate)}`
+                    : `Stan raportów: ${day(reportDate)}`}
                   {new Set(chosen.map((a) => a.asOf?.slice(0, 10))).size > 1
                     ? " • raporty z różnych dni"
                     : ""}
@@ -572,7 +692,11 @@ function App() {
                     <Stat
                       title="Wartość portfela"
                       value={money(t.value, base)}
-                      foot="Aktywa i wolne środki • stan z raportów"
+                      foot={
+                        onlineMode
+                          ? "Aktywa i gotówka • ostatnie dostępne ceny"
+                          : "Aktywa i wolne środki • stan z raportów"
+                      }
                       icon={<Wallet size={19} />}
                       main
                     />
@@ -592,7 +716,11 @@ function App() {
                     <Stat
                       title="Otrzymane dywidendy"
                       value={money(t.dividends, base)}
-                      foot="Łącznie brutto • wybrane konta"
+                      foot={
+                        onlineMode
+                          ? "Brutto • FX z dnia wypłaty"
+                          : "Łącznie brutto • wybrane konta"
+                      }
                       icon={<Leaf size={19} />}
                     />
                   </section>
@@ -604,7 +732,9 @@ function App() {
                           <p>
                             {valuation === "cost"
                               ? "Wartość według kosztu zakupu"
-                              : "Wycena według importowanych notowań"}
+                              : onlineMode
+                                ? "Ceny akcji i kursy FX z każdego dnia"
+                                : "Wycena według importowanych notowań"}
                           </p>
                         </div>
                         <div className="segmented">
@@ -621,30 +751,6 @@ function App() {
                             %
                           </button>
                         </div>
-                      </div>
-                      <div className="valuation-controls">
-                        <div className="segmented">
-                          <button
-                            className={valuation === "cost" ? "on" : ""}
-                            onClick={() => setValuation("cost")}
-                          >
-                            Koszt historyczny
-                          </button>
-                          <button
-                            className={valuation === "market" ? "on" : ""}
-                            onClick={() => setValuation("market")}
-                          >
-                            Wycena rynkowa
-                          </button>
-                        </div>
-                        {valuation === "market" && (
-                          <button
-                            className="text-button"
-                            onClick={() => setModal("settings")}
-                          >
-                            Dodaj notowania CSV <Upload size={12} />
-                          </button>
-                        )}
                       </div>
                       <div className="chart-controls">
                         <div className="legend">
@@ -683,7 +789,24 @@ function App() {
                           ))}
                         </div>
                       </div>
-                      {valuation === "market" && (
+                      {onlineMode && (
+                        <div className="market-warning">
+                          Historia dzienna z historycznymi kursami FX.{" "}
+                          {
+                            online.history.filter((d) => d.value !== null)
+                              .length
+                          }{" "}
+                          z {online.history.length} dni z pełną wyceną. Dni
+                          wolne korzystają z ostatniej znanej ceny.{" "}
+                          {online.history.some((d) => d.stale > 0)
+                            ? "Niektóre ceny są starsze niż 10 dni. "
+                            : ""}
+                          {online.history.some((d) => d.percent === null)
+                            ? "Braki danych tworzą przerwy i przerywają ciągły wynik procentowy."
+                            : ""}
+                        </div>
+                      )}
+                      {valuation === "csv" && (
                         <div className="market-warning">
                           {!quotes.length
                             ? "Dodaj notowania CSV w ustawieniach, aby zobaczyć historię rynkową. Raport XTB nie zawiera tych cen."
@@ -772,7 +895,7 @@ function App() {
                               }}
                             />
                             <Area
-                              type="stepAfter"
+                              type={onlineMode ? "linear" : "stepAfter"}
                               dataKey={
                                 chartMode === "value" ? "value" : "percent"
                               }
@@ -783,7 +906,7 @@ function App() {
                             />
                             {chartMode === "value" && valuation === "cost" && (
                               <Area
-                                type="stepAfter"
+                                type={onlineMode ? "linear" : "stepAfter"}
                                 dataKey="net"
                                 fill="none"
                                 stroke="#b9bca8"
@@ -798,7 +921,7 @@ function App() {
                       <div className="chart-note">
                         <Info size={14} />
                         {valuation === "market"
-                          ? "Ceny w walucie konta. Zmiana skorygowana zakłada przepływy na początku dnia."
+                          ? "Historyczne ceny i FX. Zmiana % od początku wybranego zakresu, z korektą o przepływy na początku dnia."
                           : chartMode === "value"
                             ? "Historia obejmuje gotówkę i koszt pozycji, bez historycznych notowań."
                             : "Wynik kosztowy / suma dodatnich przepływów. To nie jest rynkowa stopa zwrotu ani TWR."}
@@ -951,6 +1074,13 @@ function App() {
                                   <strong>{h.name}</strong>
                                   <small>
                                     {h.ticker} <span>• Akcje</span>
+                                    {onlineMode && h.quote && (
+                                      <small className="quote-stamp">
+                                        {money(h.quote.price, h.quote.currency)}{" "}
+                                        • {timestamp(h.quote.priceTime)} •{" "}
+                                        {h.quote.exchange}
+                                      </small>
+                                    )}
                                   </small>
                                 </div>
                               </div>
@@ -1208,6 +1338,16 @@ function App() {
                   </div>
                 </>
               )}
+              {onlineMode && online.warnings.length > 0 && (
+                <div className="warnings">
+                  <AlertCircle size={17} />
+                  <div>
+                    {online.warnings.map((w) => (
+                      <p key={w}>{w}</p>
+                    ))}
+                  </div>
+                </div>
+              )}
               {chosen.some((a) => a.warnings.length > 0) && (
                 <div className="warnings">
                   <AlertCircle size={17} />
@@ -1224,10 +1364,9 @@ function App() {
               )}
               <div className="info-strip">
                 <Info size={15} />
-                {chosen.length > 1 || chosen[0]?.currency !== base
-                  ? "Wartości przeliczone stałymi kursami referencyjnymi. "
-                  : ""}
-                Wycena pochodzi z raportu, a nie z bieżących notowań.{" "}
+                {onlineMode
+                  ? "Ceny online i historyczne FX: Yahoo Finance. Rynki mogą być zamknięte lub dane opóźnione. Koszt zakupu przeliczany kursem z dnia transakcji."
+                  : "Tryb raportu/CSV używa stałych referencyjnych kursów FX i nie jest wyceną online."}{" "}
                 <button onClick={() => setModal("settings")}>Szczegóły</button>
               </div>
             </>
@@ -1237,7 +1376,7 @@ function App() {
               <Leaf size={14} /> folio. <span>Inwestuj świadomie.</span>
             </span>
             <span>
-              <ShieldCheck size={13} /> Twoje dane pozostają na tym urządzeniu
+              <ShieldCheck size={13} /> Raporty pozostają na tym urządzeniu
             </span>
           </footer>
         </div>
@@ -1344,8 +1483,44 @@ function App() {
                   <Settings2 size={24} />
                 </div>
                 <h2>Ustawienia portfela</h2>
+                <MarketSettings
+                  accounts={accounts}
+                  mapping={symbols}
+                  data={remote.data}
+                  onApply={(next) => {
+                    setSymbols(next);
+                    try {
+                      localStorage.setItem(
+                        "folio-symbols-v1",
+                        JSON.stringify(next),
+                      );
+                    } catch {
+                      setNotice(
+                        "Nie udało się zapisać mapowania na tym urządzeniu.",
+                      );
+                    }
+                  }}
+                />
+                <section className="quotes-section">
+                  <h3>Kursy online do PLN</h3>
+                  {Object.entries(remote.data?.fx || {})
+                    .filter(([c]) => c !== "PLN")
+                    .map(([c, r]) => (
+                      <p key={c}>
+                        1 {c} = {r.error ? r.error : num(r.price, 6) + " PLN"} •{" "}
+                        {timestamp(r.priceTime)}
+                        <small> • {r.source}</small>
+                      </p>
+                    ))}
+                  <p>
+                    Waluta akcji i waluta konta są przeliczane oddzielnie.
+                    Historia używa kursu z każdego dnia; weekendy korzystają z
+                    poprzedniej sesji.
+                  </p>
+                </section>
                 <p>
-                  Kursy referencyjne do łączenia walut. Nie są to kursy bieżące.
+                  Kursy ręczne poniżej dotyczą wyłącznie trybu raportu i CSV.
+                  Nie nadpisują kursów online.
                 </p>
                 <div className="rate-fields">
                   {["EUR", "USD"].map((c) => (
@@ -1408,9 +1583,9 @@ function App() {
                           throw new Error("Plik przekracza 10 MB.");
                         setQuotes(parseQuotes(await f.text()));
                         setQuoteError("");
-                        setValuation("market");
+                        setValuation("csv");
                         setNotice(
-                          "Wczytano historyczne notowania. Wybierz wycenę rynkową na wykresie.",
+                          "Wczytano ceny CSV. Włączono tryb CSV ze stałym kursem FX.",
                         );
                       } catch (err) {
                         setQuoteError(err.message);
@@ -1431,6 +1606,28 @@ function App() {
                 </div>
                 <div className="methodology">
                   <h3>Jak liczymy wartości?</h3>
+                  <p>
+                    <b>Tryb online (domyślny):</b> liczba akcji z raportu ×
+                    ostatnia cena × aktualny kurs waluty. Historia zawiera
+                    dzienne ceny zamknięcia i FX z danego dnia oraz dzisiejszą
+                    ostatnią cenę. Stan transakcji nie synchronizuje się z XTB.
+                    Gotówka pochodzi z pełnej historii operacji.
+                  </p>
+                  <p>
+                    <b>Wynik online:</b> koszt każdej partii w walucie widoku
+                    jest liczony z FX na dzień zakupu. Zmiana procentowa wykresu
+                    jest łańcuchowana dziennie z konwencją przepływów na
+                    początku dnia; duże przepływy w ciągu dnia mogą wpływać na
+                    dokładność. Luki przerywają ciągły wynik. Dywidendy są w
+                    gotówce — nie używamy cen skorygowanych o dywidendy. Ceny
+                    Yahoo są skorygowane o splity; ilości normalizujemy z daty
+                    raportu/zamknięcia partii. Inne zdarzenia korporacyjne mogą
+                    wymagać korekty eksportu.
+                  </p>
+                  <p>
+                    <b>Tryb raportu / CSV:</b> poniższe zasady kosztowe i stałe
+                    kursy dotyczą tylko trybów offline.
+                  </p>
                   <p>
                     <b>Wartość portfela:</b> otwarte pozycje z raportu + suma
                     operacji gotówkowych. Eksport musi obejmować całą historię
@@ -1541,12 +1738,12 @@ function App() {
               ))}
             </div>
             <p className="muted">
-              Stan z raportów: {day(reportDate)}. Dane o wartości są w walucie
-              widoku ({base}).
+              {onlineMode ? "Wycena online pozycji z raportu" : "Stan raportów"}
+              : {day(reportDate)}. Dane o wartości są w walucie widoku ({base}).
             </p>
             <h3>Pozycje na kontach</h3>
             {chosen.flatMap((a) =>
-              a.holdings
+              (onlineMode ? online.accountHoldings[a.id] || [] : a.holdings)
                 .filter((h) => h.ticker === detail.ticker)
                 .map((h) => (
                   <div className="saved-account" key={a.id}>

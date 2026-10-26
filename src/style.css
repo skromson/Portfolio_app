@@ -1738,9 +1738,103 @@ th {
   }
 }
 @media (max-width: 600px) {
-  .account-chip { flex: 0 0 calc(50% - 5px); }
-  .holdings-panel .panel-heading { flex-direction: column; align-items: stretch; gap: 14px; }
-  .holdings-panel .panel-heading h2 { display: flex; align-items: center; }
-  .holdings-panel .search-box input { width: 100%; }
-  .holdings-panel .text-button { align-self: flex-start; }
+  .account-chip {
+    flex: 0 0 calc(50% - 5px);
+  }
+  .holdings-panel .panel-heading {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+  .holdings-panel .panel-heading h2 {
+    display: flex;
+    align-items: center;
+  }
+  .holdings-panel .search-box input {
+    width: 100%;
+  }
+  .holdings-panel .text-button {
+    align-self: flex-start;
+  }
+}
+.market-toolbar {
+  padding: 16px 20px;
+  margin: 20px 0;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.market-toolbar p {
+  flex-basis: 100%;
+  font-size: 11px;
+  color: #6f8266;
+  margin: 0;
+  line-height: 1.8;
+}
+.market-toolbar > small {
+  font-size: 10px;
+  color: #97a08d;
+}
+.mapping-list {
+  max-height: 260px;
+  overflow: auto;
+  margin: 15px 0;
+}
+.mapping-list label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+}
+.mapping-list small {
+  display: block;
+  font-size: 9px;
+  max-width: 220px;
+  color: #97a18e;
+  margin-top: 5px;
+}
+.mapping-list input {
+  width: 130px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: #546b4c;
+}
+.quote-stamp {
+  font-size: 9px !important;
+  white-space: normal;
+  max-width: 270px;
+  line-height: 1.6;
+}
+.market-toolbar .segmented {
+  white-space: normal;
+}
+.market-toolbar .segmented button {
+  font-size: 11px;
+}
+.market-warning {
+  line-height: 1.8;
+}
+@media (max-width: 600px) {
+  .market-toolbar {
+    padding: 14px;
+  }
+  .market-toolbar .segmented button {
+    font-size: 9px;
+    padding: 5px 6px;
+  }
+  .mapping-list small {
+    max-width: 150px;
+  }
+  .mapping-list input {
+    width: 110px;
+  }
 }
