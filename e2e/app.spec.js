@@ -91,11 +91,13 @@ test("imports actual reports, handles account selection, navigation, persistence
   );
   await page.getByRole("button", { name: "Zaznacz wszystkie" }).click();
   await page.getByRole("button", { name: "Operacje", exact: true }).click();
-  await expect(page.locator("tbody tr")).toHaveCount(20);
+  await expect(page.locator(".operation-table-panel tbody tr")).toHaveCount(20);
   await page
     .getByRole("button", { name: "Wpłaty i wypłaty", exact: true })
     .click();
-  await expect(page.locator("tbody")).not.toContainText("Zakup akcji");
+  await expect(page.locator(".operation-table-panel tbody")).not.toContainText(
+    "Zakup akcji",
+  );
   await page.getByRole("button", { name: "Spółki", exact: true }).click();
   await expect(page.locator(".company-card")).toHaveCount(11);
   await page.locator(".company-card").first().click();

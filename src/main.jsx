@@ -1,17 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { createRoot } from "react-dom/client";
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-} from "recharts";
+import { Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import {
   ArrowUpRight,
   ArrowDownRight,
@@ -31,7 +20,6 @@ import {
   ShieldCheck,
   Info,
   Trash2,
-  Download,
   Leaf,
   Layers,
   BriefcaseBusiness,
@@ -40,22 +28,22 @@ import {
 } from "lucide-react";
 import {
   parseWorkbook,
-  stats,
   portfolio,
   inferRates,
   mergeReports,
-  labels,
   companies,
-  isFlow,
   parseQuotes,
   marketHistory,
 } from "./portfolio";
 import "@fontsource-variable/dm-sans";
 import "@fontsource-variable/manrope";
 import "./style.css";
-import { onlinePortfolio, windowHistory } from "./online.js";
+import { onlinePortfolio } from "./online.js";
 import { useMarketData } from "./useMarketData.js";
 import MarketSettings from "./MarketSettings.jsx";
+import PortfolioChart from "./PortfolioChart.jsx";
+import OperationsPanel from "./OperationsPanel.jsx";
+import NewsPanel from "./NewsPanel.jsx";
 const palette = [
   "#27654f",
   "#7aa58a",
@@ -101,16 +89,12 @@ function App() {
     [modal, setModal] = useState(null),
     [base, setBase] = useState("PLN"),
     [rateOverrides, setRateOverrides] = useState({}),
-    [period, setPeriod] = useState("6"),
-    [chartMode, setChartMode] = useState("value"),
     [search, setSearch] = useState(""),
-    [flowFilter, setFlowFilter] = useState("all"),
     [notice, setNotice] = useState(""),
     [importErrors, setImportErrors] = useState([]),
     [busy, setBusy] = useState(false),
     [drag, setDrag] = useState(false),
     [detailSelection, setDetail] = useState(null),
-    [page, setPage] = useState(1),
     [valuation, setValuation] = useState("market"),
     [symbols, setSymbols] = useState(() => {
       try {
@@ -254,44 +238,17 @@ function App() {
     setSelected((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
-    setPage(1);
   };
   const market = useMemo(
     () => marketHistory(chosen, rates, base, quotes),
     [accounts, selected.join("|"), base, JSON.stringify(rates), quotes],
   );
-  const history = useMemo(() => {
-    const data =
-      valuation === "market"
-        ? online.history
-        : valuation === "csv"
-          ? market
-          : snapshot.history;
-    if (valuation === "market") return windowHistory(data, period);
-    if (!data.length || period === "ALL") return data;
-    const cutoff = new Date(data.at(-1).day);
-    cutoff.setUTCMonth(cutoff.getUTCMonth() - Number(period));
-    return data.filter((d) => new Date(d.day) >= cutoff);
-  }, [snapshot.history, online.history, market, period, valuation]);
-  const operations = chosen
-    .flatMap((a) =>
-      a.operations.map((o) => ({
-        ...o,
-        account: a.label,
-        accountId: a.id,
-        currency: a.currency,
-      })),
-    )
-    .filter(
-      (o) =>
-        (flowFilter === "all" ||
-          (flowFilter === "flows" && isFlow(o)) ||
-          (flowFilter === "dividend" && o.type === "Dividend")) &&
-        `${o.type} ${labels[o.type]} ${o.name} ${o.ticker} ${o.account}`
-          .toLowerCase()
-          .includes(search.toLowerCase()),
-    )
-    .sort((a, b) => b.time.localeCompare(a.time));
+  const chartHistory =
+    valuation === "market"
+      ? online.history
+      : valuation === "csv"
+        ? market
+        : snapshot.history;
   const filtered = p.holdings.filter((h) =>
     `${h.name} ${h.ticker}`.toLowerCase().includes(search.toLowerCase()),
   );
@@ -300,49 +257,12 @@ function App() {
     .filter(Boolean)
     .sort()
     .at(-1);
-  const exportCSV = () => {
-    const rows = [
-      ["Data UTC", "Konto", "Waluta", "Typ", "Instrument", "Kwota"],
-      ...operations.map((o) => [
-        o.time,
-        o.account,
-        o.currency,
-        labels[o.type] || o.type,
-        o.ticker,
-        o.amount,
-      ]),
-    ];
-    const csv =
-      "\uFEFF" +
-      rows
-        .map((r) =>
-          r
-            .map(
-              (c) =>
-                '"' +
-                (typeof c === "string" && /^[=+\-@\t\r]/.test(c)
-                  ? "'" + c
-                  : String(c)
-                ).replaceAll('"', '""') +
-                '"',
-            )
-            .join(";"),
-        )
-        .join("\r\n");
-    const url = URL.createObjectURL(
-      new Blob([csv], { type: "text/csv;charset=utf-8" }),
-    );
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "folio-operacje.csv";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
   const tabs = [
     ["overview", "Przegląd", LayoutDashboard],
     ["holdings", "Aktywa", BriefcaseBusiness],
     ["operations", "Operacje", ArrowLeftRight],
     ["companies", "Spółki", Building2],
+    ["news", "Wiadomości i wyniki", Info],
   ];
   return (
     <div className="app">
@@ -369,7 +289,6 @@ function App() {
               onClick={() => {
                 setView(id);
                 setSearch("");
-                setPage(1);
               }}
             >
               <Icon size={19} />
@@ -426,14 +345,18 @@ function App() {
                     ? "Twoje aktywa"
                     : view === "operations"
                       ? "Historia operacji"
-                      : "Spółki w portfelu"}
+                      : view === "news"
+                        ? "Wiadomości i terminy wyników"
+                        : "Spółki w portfelu"}
               </h1>
               <p>
                 {view === "overview"
                   ? "Pełny obraz Twoich inwestycji. Spokojnie, przejrzyście, po Twojemu."
                   : view === "operations"
                     ? "Wpłaty, wypłaty, transfery i transakcje na wybranych kontach."
-                    : "Zobacz, w co inwestujesz i jak pracuje Twój kapitał."}
+                    : view === "news"
+                      ? "Najnowsze informacje o spółkach na wybranych kontach."
+                      : "Zobacz, w co inwestujesz i jak pracuje Twój kapitał."}
               </p>
             </div>
             <button
@@ -632,6 +555,16 @@ function App() {
             <div className="panel empty-state">
               Wybierz przynajmniej jedno konto powyżej.
             </div>
+          ) : view === "operations" ? (
+            <OperationsPanel
+              accounts={chosen}
+              base={base}
+              marketData={remote.data}
+              rates={rates}
+              onlineMode={onlineMode}
+            />
+          ) : view === "news" ? (
+            <NewsPanel accounts={chosen} symbols={symbols} />
           ) : p.missing.length ? (
             <div className="panel empty-state">
               <Info />
@@ -725,208 +658,16 @@ function App() {
                     />
                   </section>
                   <div className="charts-grid">
-                    <section className="panel history-panel">
-                      <div className="panel-heading">
-                        <div>
-                          <h2>Historia kapitału</h2>
-                          <p>
-                            {valuation === "cost"
-                              ? "Wartość według kosztu zakupu"
-                              : onlineMode
-                                ? "Ceny akcji i kursy FX z każdego dnia"
-                                : "Wycena według importowanych notowań"}
-                          </p>
-                        </div>
-                        <div className="segmented">
-                          <button
-                            className={chartMode === "value" ? "on" : ""}
-                            onClick={() => setChartMode("value")}
-                          >
-                            Kwota
-                          </button>
-                          <button
-                            className={chartMode === "percent" ? "on" : ""}
-                            onClick={() => setChartMode("percent")}
-                          >
-                            %
-                          </button>
-                        </div>
-                      </div>
-                      <div className="chart-controls">
-                        <div className="legend">
-                          <span>
-                            <i style={{ background: "#39765b" }} />
-                            {chartMode === "value"
-                              ? valuation === "cost"
-                                ? "Kapitał według kosztu"
-                                : "Wartość rynkowa"
-                              : valuation === "cost"
-                                ? "Wynik / suma wpływów"
-                                : "Zmiana po korekcie przepływów"}
-                          </span>
-                          {chartMode === "value" && valuation === "cost" && (
-                            <span>
-                              <i className="dashed" />
-                              Wpływy netto
-                            </span>
-                          )}
-                        </div>
-                        <div className="periods">
-                          {[
-                            ["1", "1M"],
-                            ["3", "3M"],
-                            ["6", "6M"],
-                            ["12", "1R"],
-                            ["ALL", "Całość"],
-                          ].map(([id, label]) => (
-                            <button
-                              key={id}
-                              className={period === id ? "on" : ""}
-                              onClick={() => setPeriod(id)}
-                            >
-                              {label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      {onlineMode && (
-                        <div className="market-warning">
-                          Historia dzienna z historycznymi kursami FX.{" "}
-                          {
-                            online.history.filter((d) => d.value !== null)
-                              .length
-                          }{" "}
-                          z {online.history.length} dni z pełną wyceną. Dni
-                          wolne korzystają z ostatniej znanej ceny.{" "}
-                          {online.history.some((d) => d.stale > 0)
-                            ? "Niektóre ceny są starsze niż 10 dni. "
-                            : ""}
-                          {online.history.some((d) => d.percent === null)
-                            ? "Braki danych tworzą przerwy i przerywają ciągły wynik procentowy."
-                            : ""}
-                        </div>
-                      )}
-                      {valuation === "csv" && (
-                        <div className="market-warning">
-                          {!quotes.length
-                            ? "Dodaj notowania CSV w ustawieniach, aby zobaczyć historię rynkową. Raport XTB nie zawiera tych cen."
-                            : `${market.filter((d) => d.value !== null).length} z ${market.length} dni ma pełne pokrycie cenami. Braki tworzą przerwy; ostatnia znana cena jest przenoszona do przodu.`}
-                          {market.some((d) => d.stale > 0) &&
-                            " Niektóre ceny mają ponad 7 dni."}
-                          {market.some((d) => d.percent === null) &&
-                          chartMode === "percent"
-                            ? " Braki cen uniemożliwiają ciągłą stopę zwrotu od początku okresu."
-                            : ""}
-                        </div>
-                      )}
-                      <div className="chart">
-                        <ResponsiveContainer width="100%" height={260}>
-                          <AreaChart
-                            data={history}
-                            margin={{ left: 0, right: 8, top: 15, bottom: 0 }}
-                          >
-                            <defs>
-                              <linearGradient
-                                id="fill"
-                                x1="0"
-                                y1="0"
-                                x2="0"
-                                y2="1"
-                              >
-                                <stop
-                                  offset="0%"
-                                  stopColor="#619372"
-                                  stopOpacity={0.25}
-                                />
-                                <stop
-                                  offset="100%"
-                                  stopColor="#619372"
-                                  stopOpacity={0.01}
-                                />
-                              </linearGradient>
-                            </defs>
-                            <CartesianGrid vertical={false} stroke="#eef0eb" />
-                            <XAxis
-                              dataKey="day"
-                              tickFormatter={(v) =>
-                                new Date(v).toLocaleDateString("pl-PL", {
-                                  month: "short",
-                                  year: "2-digit",
-                                })
-                              }
-                              axisLine={false}
-                              tickLine={false}
-                              minTickGap={50}
-                              tick={{ fontSize: 11, fill: "#899087" }}
-                            />
-                            <YAxis
-                              tickFormatter={(v) =>
-                                chartMode === "percent"
-                                  ? `${num(v, 0)}%`
-                                  : Math.abs(v) >= 1000
-                                    ? `${num(v / 1000, 1)} tys.`
-                                    : num(v, 0)
-                              }
-                              axisLine={false}
-                              tickLine={false}
-                              width={66}
-                              tick={{ fontSize: 11, fill: "#899087" }}
-                            />
-                            <Tooltip
-                              labelFormatter={day}
-                              formatter={(v, k) => [
-                                chartMode === "percent"
-                                  ? `${num(v)}%`
-                                  : money(v, base),
-                                k === "net"
-                                  ? "Wpływy netto"
-                                  : chartMode === "percent"
-                                    ? valuation === "cost"
-                                      ? "Wynik / suma wpływów"
-                                      : "Zmiana skorygowana"
-                                    : valuation === "cost"
-                                      ? "Kapitał według kosztu"
-                                      : "Wartość rynkowa",
-                              ]}
-                              contentStyle={{
-                                border: "1px solid #e4e8df",
-                                borderRadius: 12,
-                                fontSize: 12,
-                              }}
-                            />
-                            <Area
-                              type={onlineMode ? "linear" : "stepAfter"}
-                              dataKey={
-                                chartMode === "value" ? "value" : "percent"
-                              }
-                              stroke="#39765b"
-                              fill="url(#fill)"
-                              strokeWidth={2}
-                              isAnimationActive={false}
-                            />
-                            {chartMode === "value" && valuation === "cost" && (
-                              <Area
-                                type={onlineMode ? "linear" : "stepAfter"}
-                                dataKey="net"
-                                fill="none"
-                                stroke="#b9bca8"
-                                strokeDasharray="4 4"
-                                strokeWidth={1.5}
-                                isAnimationActive={false}
-                              />
-                            )}
-                          </AreaChart>
-                        </ResponsiveContainer>
-                      </div>
-                      <div className="chart-note">
-                        <Info size={14} />
-                        {valuation === "market"
-                          ? "Historyczne ceny i FX. Zmiana % od początku wybranego zakresu, z korektą o przepływy na początku dnia."
-                          : chartMode === "value"
-                            ? "Historia obejmuje gotówkę i koszt pozycji, bez historycznych notowań."
-                            : "Wynik kosztowy / suma dodatnich przepływów. To nie jest rynkowa stopa zwrotu ani TWR."}
-                      </div>
-                    </section>
+                    <PortfolioChart
+                      history={chartHistory}
+                      accounts={chosen}
+                      marketData={remote.data}
+                      base={base}
+                      rates={rates}
+                      onlineMode={onlineMode}
+                      valuation={valuation}
+                      onSettings={() => setModal("settings")}
+                    />
                     <section className="panel allocation-panel">
                       <div className="panel-heading">
                         <div>
@@ -1133,152 +874,6 @@ function App() {
                     )}
                   </div>
                 </section>
-              )}
-              {view === "operations" && (
-                <>
-                  <div className="stats-grid flows-stats">
-                    {chosen.map((a) => {
-                      const s = stats(a);
-                      return (
-                        <Stat
-                          key={a.id}
-                          title={`Konto ${a.label}`}
-                          value={money(s.inflows - s.outflows, a.currency)}
-                          foot={`Wpływy ${money(s.inflows, a.currency)} · Wypływy ${money(s.outflows, a.currency)}`}
-                          icon={<ArrowLeftRight size={19} />}
-                        />
-                      );
-                    })}
-                  </div>
-                  <div className="info-strip">
-                    <Info size={16} />
-                    Wpływy i wypływy obejmują transfery między kontami i wymiany
-                    walut. Nie oznaczają wyłącznie nowych wpłat z banku. Każda
-                    operacja jest pokazana w walucie konta.
-                  </div>
-                  <section className="panel">
-                    <div className="panel-heading">
-                      <h2>
-                        Operacje{" "}
-                        <span className="count">{operations.length}</span>
-                      </h2>
-                      <button className="secondary" onClick={exportCSV}>
-                        <Download size={15} />
-                        Eksport CSV
-                      </button>
-                    </div>
-                    <div className="filter-row">
-                      <div className="segmented">
-                        {[
-                          ["all", "Wszystkie"],
-                          ["flows", "Wpłaty i wypłaty"],
-                          ["dividend", "Dywidendy"],
-                        ].map(([id, l]) => (
-                          <button
-                            className={flowFilter === id ? "on" : ""}
-                            key={id}
-                            onClick={() => {
-                              setFlowFilter(id);
-                              setPage(1);
-                            }}
-                          >
-                            {l}
-                          </button>
-                        ))}
-                      </div>
-                      <SearchBox
-                        value={search}
-                        onChange={(x) => {
-                          setSearch(x);
-                          setPage(1);
-                        }}
-                      />
-                    </div>
-                    <div className="table-wrap">
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>DATA</th>
-                            <th>OPERACJA</th>
-                            <th>INSTRUMENT</th>
-                            <th>KONTO</th>
-                            <th>KWOTA</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {operations
-                            .slice((page - 1) * 20, page * 20)
-                            .map((o) => (
-                              <tr key={o.accountId + o.id}>
-                                <td>{day(o.time)}</td>
-                                <td>
-                                  <span className="operation-type">
-                                    <span
-                                      className={
-                                        o.amount >= 0
-                                          ? "flow-icon positive"
-                                          : "flow-icon negative"
-                                      }
-                                    >
-                                      {o.amount >= 0 ? (
-                                        <ArrowDownRight size={15} />
-                                      ) : (
-                                        <ArrowUpRight size={15} />
-                                      )}
-                                    </span>
-                                    {labels[o.type] || o.type}
-                                  </span>
-                                </td>
-                                <td>
-                                  {o.name || "—"}
-                                  <small>{o.ticker}</small>
-                                </td>
-                                <td>
-                                  <span className="tag">{o.account}</span>
-                                </td>
-                                <td
-                                  className={
-                                    o.amount >= 0
-                                      ? "positive bold"
-                                      : "negative bold"
-                                  }
-                                >
-                                  {o.amount > 0 ? "+" : ""}
-                                  {money(o.amount, o.currency)}
-                                </td>
-                              </tr>
-                            ))}
-                        </tbody>
-                      </table>
-                      {!operations.length && (
-                        <div className="empty-state">
-                          Brak operacji spełniających kryteria.
-                        </div>
-                      )}
-                    </div>
-                    <div className="pagination">
-                      <span>
-                        {operations.length
-                          ? `${(page - 1) * 20 + 1}–${Math.min(page * 20, operations.length)} z ${operations.length} operacji`
-                          : "0 operacji"}
-                      </span>
-                      <button
-                        className="secondary"
-                        disabled={page === 1}
-                        onClick={() => setPage(page - 1)}
-                      >
-                        Poprzednia
-                      </button>
-                      <button
-                        className="secondary"
-                        disabled={page * 20 >= operations.length}
-                        onClick={() => setPage(page + 1)}
-                      >
-                        Następna
-                      </button>
-                    </div>
-                  </section>
-                </>
               )}
               {view === "companies" && (
                 <>
@@ -1618,9 +1213,11 @@ function App() {
                     jest liczony z FX na dzień zakupu. Zmiana procentowa wykresu
                     jest łańcuchowana dziennie z konwencją przepływów na
                     początku dnia; duże przepływy w ciągu dnia mogą wpływać na
-                    dokładność. Luki przerywają ciągły wynik. Dywidendy są w
-                    gotówce — nie używamy cen skorygowanych o dywidendy. Ceny
-                    Yahoo są skorygowane o splity; ilości normalizujemy z daty
+                    dokładność. Brakujące wyceny są oznaczonym szacunkiem z
+                    wcześniejszych danych lub transakcji; całkowity brak podstaw
+                    wyceny jest jawnie oznaczony. Dywidendy są w gotówce — nie
+                    używamy cen skorygowanych o dywidendy. Ceny Yahoo są
+                    skorygowane o splity; ilości normalizujemy z daty
                     raportu/zamknięcia partii. Inne zdarzenia korporacyjne mogą
                     wymagać korekty eksportu.
                   </p>

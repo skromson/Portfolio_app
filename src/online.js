@@ -47,6 +47,118 @@ export function quantityNow(quantity, reference, splits = []) {
       .reduce((f, s) => f * s.ratio, 1)
   );
 }
+
+// Never suppress a boundary flow from a comment alone: both ledger legs must
+// actually be present in the selected reports.
+export function classifyInternalTransfers(accounts) {
+  const selected = new Set(accounts.map((a) => String(a.id)));
+  const entries = accounts.flatMap((a) => a.operations.map((o) => ({ a, o })));
+  const internal = new Set(),
+    unmatched = new Set();
+  const transfer = (o) =>
+    ["Transfer", "IKE deposit", "IKE withdrawal"].includes(o.type);
+  const peerIds = (o) =>
+    [
+      ...String(o.comment || "").matchAll(
+        /(?:from(?:\s+TA)?|to)\s*:\s*(\d+)/gi,
+      ),
+    ].map((m) => m[1]);
+  for (const entry of entries) {
+    const { a, o } = entry;
+    if (!transfer(o)) continue;
+    const ids = [...new Set(peerIds(o))];
+    if (
+      ids.length !== 2 ||
+      !ids.every((id) => selected.has(id)) ||
+      !ids.includes(String(a.id))
+    )
+      continue;
+    const peer = ids.find((id) => id !== String(a.id));
+    const matches = entries.filter(
+      (other) =>
+        String(other.a.id) === peer &&
+        transfer(other.o) &&
+        Math.sign(other.o.amount) === -Math.sign(o.amount) &&
+        Math.abs(Date.parse(other.o.time) - Date.parse(o.time)) <= 2500 &&
+        ids.every((id) => peerIds(other.o).includes(id)),
+    );
+    if (matches.length === 1) {
+      internal.add(o);
+      internal.add(matches[0].o);
+    } else unmatched.add(o);
+  }
+  for (const e of entries) {
+    if (internal.has(e.o) || unmatched.has(e.o) || !transfer(e.o)) continue;
+    const matches = entries.filter(
+      (other) =>
+        other.a.id !== e.a.id &&
+        !internal.has(other.o) &&
+        !unmatched.has(other.o) &&
+        transfer(other.o) &&
+        other.a.currency === e.a.currency &&
+        Math.abs(other.o.amount + e.o.amount) < 0.005 &&
+        Math.abs(Date.parse(other.o.time) - Date.parse(e.o.time)) <= 2500,
+    );
+    if (matches.length === 1) {
+      internal.add(e.o);
+      internal.add(matches[0].o);
+    }
+  }
+  return { internal, unmatched };
+}
+export function internalTransferOperations(accounts) {
+  return classifyInternalTransfers(accounts).internal;
+}
+
+export function rebaseHistory(series) {
+  let previous = null,
+    index = 1,
+    pendingFlow = 0,
+    uncertain = false,
+    gap = false,
+    invalidChain = false;
+  return series.map((point) => {
+    const d = { ...point };
+    uncertain ||= Boolean(d.estimated);
+    const flow = Number.isFinite(d.flow) ? d.flow : 0;
+    if (d.value == null || !Number.isFinite(d.value)) {
+      pendingFlow += flow;
+      gap = true;
+      uncertain = true;
+      return { ...d, percent: null, estimatedReturn: true };
+    }
+    let returnUnavailable = false;
+    if (previous !== null) {
+      const denominator = previous + pendingFlow + flow;
+      if (denominator > 0) index *= d.value / denominator;
+      else if (Math.abs(d.value) > 0.01) {
+        returnUnavailable = true;
+        invalidChain = true;
+        uncertain = true;
+      }
+    }
+    previous = d.value;
+    pendingFlow = 0;
+    const returnEstimates = gap
+      ? [
+          {
+            source:
+              "Zmiana między dostępnymi wycenami; przepływy z luki przypisane do początku przedziału.",
+          },
+        ]
+      : [];
+    const answer = {
+      ...d,
+      percent: returnUnavailable || invalidChain ? null : (index - 1) * 100,
+      estimatedReturn: uncertain,
+      returnEstimates,
+      returnUnavailable,
+    };
+    gap = false;
+    return answer;
+  });
+}
+
 export function onlinePortfolio(accounts, data, base = "PLN") {
   const empty = {
     missing: [],
@@ -174,9 +286,12 @@ export function onlinePortfolio(accounts, data, base = "PLN") {
   totals.value = totals.assets + totals.cash;
   const first = marketRequest(accounts).from;
   const history = [];
-  let previous = null,
-    index = 1,
-    chain = true;
+  const { internal: internalTransfers, unmatched: unmatchedTransfers } =
+    classifyInternalTransfers(accounts);
+  if (unmatchedTransfers.size)
+    warnings.add(
+      "Nie znaleziono drugiej strony części transferów między wybranymi kontami. Traktujemy je jako przepływy graniczne, a wynik oznaczamy jako szacunkowy; sprawdź zakresy raportów.",
+    );
   const cashBalances = accounts.map(() => 0),
     operationLists = accounts.map((a) =>
       [...a.operations].sort((a, b) => a.time.localeCompare(b.time)),
@@ -192,6 +307,8 @@ export function onlinePortfolio(accounts, data, base = "PLN") {
       flow = 0,
       missing = 0,
       stale = 0;
+    const flows = [],
+      estimates = [];
     for (let ai = 0; ai < accounts.length; ai++) {
       const a = accounts[ai],
         ops = operationLists[ai];
@@ -201,10 +318,31 @@ export function onlinePortfolio(accounts, data, base = "PLN") {
       ) {
         const o = ops[indices[ai]++];
         cashBalances[ai] += o.amount;
-        if (o.time.slice(0, 10) === day && isFlow(o)) {
+        if (o.time.slice(0, 10) === day) {
           const f = convert(o.amount, a.currency, base, day);
-          if (f === null) missing++;
-          else flow += f;
+          const internal = internalTransfers.has(o);
+          if (unmatchedTransfers.has(o))
+            estimates.push({
+              ticker: o.ticker || "",
+              source:
+                "Brak drugiej strony transferu w wybranych raportach; przepływ graniczny jest szacunkowy",
+              observedDay: day,
+            });
+          flows.push({
+            type: o.type,
+            amount: f,
+            time: o.time,
+            accountId: a.id,
+            accountLabel: a.label,
+            ticker: o.ticker || "",
+            internal,
+            nativeAmount: o.amount,
+            currency: a.currency,
+          });
+          if (isFlow(o) && !internal) {
+            if (f === null) missing++;
+            else flow += f;
+          }
         }
       }
       const cash =
@@ -220,57 +358,82 @@ export function onlinePortfolio(accounts, data, base = "PLN") {
         )
           continue;
         const i = data.instruments[l.ticker];
-        if (!i || i.error) {
-          missing++;
-          continue;
+        const q = at(i?.history, day);
+        const price = day === today && i?.price > 0 ? i.price : q?.close;
+        const quantity = quantityNow(l.quantity, l.close || a.asOf, i?.splits);
+        let v = null;
+        if (price > 0 && i?.currency) {
+          v = convert(
+            quantity * price,
+            i.currency,
+            base,
+            day === today ? null : day,
+          );
+          if (q && stamp - Date.parse(q.day) > 10 * DAY) {
+            stale++;
+            estimates.push({
+              ticker: l.ticker,
+              source:
+                "Przeniesiona ostatnia dostępna cena (starsza niż 10 dni)",
+              observedDay: q.day,
+            });
+          }
+        } else if (l.cost >= 0 && Number.isFinite(l.cost)) {
+          // No historical quote exists yet. The opening transaction provides
+          // an authentic observation; never use a later close to fill it.
+          const openingDay = l.open.slice(0, 10);
+          if (i?.currency) {
+            const openingNative = convert(
+              l.cost,
+              a.currency,
+              i.currency,
+              openingDay,
+            );
+            if (openingNative !== null)
+              v = convert(openingNative, i.currency, base, day);
+          } else v = convert(l.cost, a.currency, base, day);
+          if (v !== null)
+            estimates.push({
+              ticker: l.ticker,
+              source: i?.currency
+                ? "Koszt otwarcia partii i historyczny FX; brak ceny giełdowej"
+                : "Koszt otwarcia partii w walucie konta; brak ceny i waluty notowania",
+              observedDay: openingDay,
+            });
         }
-        const q = at(i.history, day);
-        const price = day === today ? i.price : q?.close;
-        if (!(price > 0)) {
-          missing++;
-          continue;
-        }
-        const quantity = quantityNow(l.quantity, l.close || a.asOf, i.splits);
-        const v = convert(
-          quantity * price,
-          i.currency,
-          base,
-          day === today ? null : day,
-        );
         if (v === null) {
           missing++;
           continue;
         }
         value += v;
-        if (q && stamp - Date.parse(q.day) > 10 * DAY) stale++;
       }
     }
-    if (missing) {
-      chain = false;
-      previous = null;
-      history.push({ day, value: null, percent: null, missing, stale, flow });
-      continue;
-    }
-    if (previous !== null && chain) {
-      const denominator = previous + flow;
-      if (denominator > 0) index *= value / denominator;
-      else if (Math.abs(value) > 0.01) chain = false;
-    }
+    const boundary = flows.filter(
+      (o) => isFlow(o) && !o.internal && o.amount !== null,
+    );
     history.push({
       day,
-      value,
-      percent: chain ? (index - 1) * 100 : null,
-      missing: 0,
+      value: missing ? null : value,
+      percent: null,
+      missing,
       stale,
       flow,
+      flows,
+      inflow: boundary
+        .filter((o) => o.amount > 0)
+        .reduce((sum, o) => sum + o.amount, 0),
+      outflow: -boundary
+        .filter((o) => o.amount < 0)
+        .reduce((sum, o) => sum + o.amount, 0),
+      estimated: estimates.length > 0,
+      estimates,
     });
-    previous = value;
   }
   const sorted = [...holdings.values()].sort((a, b) => b.value - a.value);
   return {
     missing: [...errors],
     holdings: sorted,
-    history,
+    history: rebaseHistory(history),
     totals,
     accountHoldings,
     warnings: [...warnings],
@@ -278,25 +441,8 @@ export function onlinePortfolio(accounts, data, base = "PLN") {
 }
 
 export function windowHistory(series, period) {
-  if (!series.length || period === "ALL") return series;
+  if (!series.length || period === "ALL") return rebaseHistory(series);
   const cutoff = new Date(series.at(-1).day);
   cutoff.setUTCMonth(cutoff.getUTCMonth() - Number(period));
-  const selected = series.filter((d) => new Date(d.day) >= cutoff);
-  let previous = null,
-    index = 1,
-    complete = true;
-  return selected.map((d) => {
-    if (d.value === null) {
-      complete = false;
-      previous = null;
-      return { ...d, percent: null };
-    }
-    if (previous !== null && complete) {
-      const denominator = previous + (d.flow || 0);
-      if (denominator > 0) index *= d.value / denominator;
-      else if (Math.abs(d.value) > 0.01) complete = false;
-    }
-    previous = d.value;
-    return { ...d, percent: complete ? (index - 1) * 100 : null };
-  });
+  return rebaseHistory(series.filter((d) => new Date(d.day) >= cutoff));
 }

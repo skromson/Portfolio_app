@@ -1838,3 +1838,8 @@ th {
     width: 110px;
   }
 }
+
+/* Keep the compact allocation card from stretching alongside chart comparisons. */
+.charts-grid {
+  align-items: start;
+}

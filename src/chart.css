@@ -1,0 +1,599 @@
+.folio-history-panel {
+  min-width: 0;
+  overflow: visible;
+}
+.folio-history-panel .panel-heading {
+  padding-bottom: 12px;
+}
+.folio-chart-summary {
+  padding: 4px 23px 14px;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 10px;
+}
+.folio-chart-summary > div:first-child > small {
+  font-size: 8px;
+  letter-spacing: 1.1px;
+  display: block;
+  color: #9aa38f;
+}
+.folio-chart-summary strong {
+  font-family: "Manrope Variable", sans-serif;
+  font-size: 22px;
+  letter-spacing: -0.7px;
+  display: block;
+  margin-top: 6px;
+  font-weight: 650;
+  color: #3d654d;
+}
+.folio-chart-summary .periods button {
+  font-size: 10px;
+}
+.folio-chart-range {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 23px 14px;
+  flex-wrap: wrap;
+}
+.folio-chart-range > label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #97a08e;
+  font-size: 10px;
+}
+.folio-chart-range input[type="date"] {
+  width: 118px;
+  border: 1px solid #e6ebdf;
+  padding: 5px 7px;
+  border-radius: 5px;
+  color: #6c7d60;
+  background: #fcfdf9;
+  font-size: 10px;
+}
+.folio-chart-tools {
+  display: flex;
+  gap: 3px;
+  margin-left: auto;
+}
+.folio-chart-tools button {
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  border: 1px solid #e3e9dc;
+  border-radius: 5px;
+  color: #788d66;
+  background: #fcfdf9;
+}
+.folio-chart-tools button:disabled {
+  opacity: 0.32;
+}
+.folio-chart-legend {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 0 23px 12px;
+  font-size: 9px;
+  color: #87957b;
+}
+.folio-chart-legend > span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.folio-chart-legend i,
+.folio-chart-tooltip i,
+.folio-benchmark-list i {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.folio-chart-legend .estimated-key {
+  border: 1px dashed #b58d47;
+  background: #f6e8c8;
+}
+.folio-chart-estimate {
+  display: flex;
+  gap: 7px;
+  padding: 9px 12px;
+  margin: 0 21px 8px;
+  background: #fbf8ed;
+  color: #ad955d;
+  border: 1px solid #f1e9d4;
+  border-radius: 6px;
+  font-size: 9px;
+  line-height: 1.7;
+}
+.folio-chart-estimate > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.folio-chart-plot {
+  touch-action: none;
+  cursor: grab;
+  padding-right: 7px;
+  user-select: none;
+  position: relative;
+}
+.folio-chart-plot:active {
+  cursor: grabbing;
+}
+.folio-chart-plot:focus-visible {
+  outline: 2px solid #bed0ae;
+  outline-offset: -3px;
+}
+.folio-chart-navigator {
+  padding-right: 7px;
+}
+.folio-chart-navigator .recharts-brush-texts {
+  font-size: 9px;
+  fill: #98a18f;
+}
+.folio-chart-affordance {
+  font-size: 8px;
+  color: #a6af9b;
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  padding: 0 23px 13px;
+}
+.folio-chart-tooltip {
+  max-width: 330px;
+  border: 1px solid #e1e9d8;
+  border-radius: 9px;
+  background: #fffffff5;
+  box-shadow: 0 4px 18px #30412813;
+  padding: 12px 14px;
+  font-size: 10px;
+  color: #7f8e71;
+  line-height: 1.7;
+  pointer-events: none;
+}
+.folio-chart-tooltip > strong {
+  font-size: 11px;
+  display: block;
+  color: #5a6e4e;
+  margin-bottom: 6px;
+}
+.folio-chart-tooltip > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin: 2px 0;
+}
+.folio-chart-tooltip > div > span {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+.folio-chart-tooltip b {
+  font-weight: 550;
+  color: #5c7350;
+}
+.folio-chart-tooltip p {
+  margin: 8px 0 0;
+  font-size: 9px;
+  line-height: 1.6;
+}
+.folio-chart-tooltip .estimate-tooltip {
+  color: #a48a51;
+}
+.folio-chart-tooltip hr {
+  border: 0;
+  border-top: 1px solid #edf1e7;
+  margin: 8px 0;
+}
+.folio-chart-tooltip ul {
+  list-style: none;
+  margin: 7px 0 0;
+  padding: 0;
+}
+.folio-chart-tooltip li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 9px;
+  margin: 3px 0;
+}
+.folio-flow-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 11px 23px;
+  border-top: 1px solid #eff2e9;
+  border-bottom: 1px solid #eff2e9;
+  background: #fcfdf9;
+  font-size: 10px;
+  color: #8b987c;
+}
+.folio-flow-controls > label {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  cursor: pointer;
+}
+.folio-flow-controls input {
+  accent-color: #6b8a58;
+  margin: 0;
+  width: 12px;
+  height: 12px;
+}
+.folio-flow-controls details {
+  margin-left: auto;
+  position: relative;
+}
+.folio-flow-controls summary {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  list-style: none;
+}
+.folio-flow-controls summary::-webkit-details-marker {
+  display: none;
+}
+.folio-flow-popover {
+  position: absolute;
+  right: 0;
+  top: 26px;
+  z-index: 6;
+  background: #fff;
+  border: 1px solid #e4eada;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px #2f48221a;
+  padding: 13px;
+  width: 200px;
+  display: grid;
+  gap: 9px;
+}
+.folio-flow-popover > button {
+  font-size: 10px;
+  color: #668751;
+  text-align: left;
+  padding: 0 0 8px;
+  border-bottom: 1px solid #edf1e6;
+}
+.folio-flow-popover label {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  cursor: pointer;
+  font-size: 10px;
+}
+.folio-benchmark-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 23px;
+}
+.folio-benchmark-header .segmented button {
+  font-size: 9px;
+  padding: 5px 8px;
+}
+.folio-benchmark-editor {
+  background: #f8faf4;
+  border-top: 1px solid #edf1e6;
+  border-bottom: 1px solid #edf1e6;
+  padding: 16px 23px;
+}
+.folio-benchmark-editor h3 {
+  font-size: 12px;
+  color: #5e7950;
+  margin: 0 0 7px;
+}
+.folio-benchmark-editor > p {
+  font-size: 10px;
+  color: #99a38d;
+  line-height: 1.7;
+  margin: 6px 0 12px;
+}
+.folio-benchmark-presets {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+.folio-benchmark-presets button {
+  border: 1px solid #e1e8d6;
+  background: white;
+  color: #7b9168;
+  border-radius: 5px;
+  font-size: 9px;
+  padding: 6px 9px;
+}
+.folio-benchmark-presets button:disabled {
+  opacity: 0.35;
+}
+.folio-benchmark-editor form {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+}
+.folio-benchmark-editor .search-box {
+  flex: 1;
+  min-width: 0;
+}
+.folio-benchmark-editor .search-box input {
+  width: 100%;
+  font-size: 10px;
+}
+.folio-benchmark-editor .secondary {
+  font-size: 10px;
+  padding: 7px 10px;
+}
+.folio-benchmark-editor .folio-benchmark-disclaimer {
+  font-size: 9px;
+  color: #a1aa95;
+  margin-bottom: 0;
+}
+.folio-benchmark-results {
+  list-style: none;
+  padding: 0;
+  background: #fff;
+  border: 1px solid #e5eadc;
+  border-radius: 7px;
+  max-height: 240px;
+  overflow: auto;
+  margin: 9px 0;
+}
+.folio-benchmark-results button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid #f0f3eb;
+  color: #7a8f68;
+}
+.folio-benchmark-results li:last-child button {
+  border-bottom: 0;
+}
+.folio-benchmark-results button:hover {
+  background: #f7faf2;
+}
+.folio-benchmark-results b {
+  font-size: 10px;
+  font-weight: 550;
+  display: block;
+  color: #6b805b;
+}
+.folio-benchmark-results small {
+  font-size: 9px;
+  display: block;
+  margin-top: 4px;
+  color: #a0aa92;
+}
+.folio-benchmark-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 0 23px 13px;
+}
+.folio-benchmark-list > div {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  border: 1px solid #e6ecdd;
+  background: #fcfdf9;
+  border-radius: 5px;
+  padding: 6px 8px;
+  color: #71855e;
+  font-size: 9px;
+}
+.folio-benchmark-list > div > span {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+.folio-benchmark-list b {
+  font-weight: 500;
+}
+.folio-benchmark-list small {
+  color: #a0aa92;
+  font-size: 8px;
+}
+.folio-benchmark-list strong {
+  font-size: 9px;
+  font-weight: 550;
+}
+.folio-benchmark-list button {
+  display: flex;
+  padding: 0;
+  color: #a5b097;
+}
+.folio-benchmark-list > div > small {
+  width: 100%;
+  font-size: 9px;
+  line-height: 1.5;
+}
+.folio-benchmark-status {
+  font-size: 10px;
+  color: #98a28d;
+  padding: 0 23px;
+  margin: 0 0 12px;
+}
+.folio-history-panel .chart-note {
+  align-items: flex-start;
+  line-height: 1.7;
+}
+.folio-history-panel .chart-note > svg {
+  margin-top: 2px;
+}
+.folio-history-panel .chart-note button {
+  padding: 0;
+  font-size: inherit;
+  text-decoration: underline;
+  color: #7a9166;
+}
+@media (max-width: 600px) {
+  .folio-chart-summary,
+  .folio-chart-range,
+  .folio-chart-legend,
+  .folio-chart-affordance,
+  .folio-benchmark-header {
+    padding-left: 15px;
+    padding-right: 15px;
+  }
+  .folio-chart-summary {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 13px;
+  }
+  .folio-chart-summary .periods {
+    margin-left: 0;
+    align-self: flex-end;
+  }
+  .folio-chart-summary strong {
+    font-size: 22px;
+  }
+  .folio-chart-range {
+    gap: 8px;
+  }
+  .folio-chart-range input[type="date"] {
+    width: 111px;
+    font-size: 9px;
+  }
+  .folio-chart-tools {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .folio-chart-legend {
+    font-size: 8px;
+    gap: 7px;
+  }
+  .folio-chart-estimate {
+    margin-left: 13px;
+    margin-right: 13px;
+    font-size: 8px;
+  }
+  .folio-chart-affordance {
+    font-size: 8px;
+    line-height: 1.7;
+  }
+  .folio-flow-controls {
+    padding: 11px 15px;
+    gap: 9px;
+    font-size: 9px;
+  }
+  .folio-flow-controls details {
+    margin-left: 0;
+  }
+  .folio-flow-popover {
+    left: 0;
+    right: auto;
+  }
+  .folio-benchmark-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .folio-benchmark-editor {
+    padding: 15px;
+  }
+  .folio-benchmark-editor form {
+    flex-wrap: wrap;
+  }
+  .folio-benchmark-editor form .search-box {
+    flex-basis: 100%;
+  }
+  .folio-benchmark-list {
+    padding: 0 15px 12px;
+  }
+  .folio-benchmark-status {
+    padding-left: 15px;
+    padding-right: 15px;
+  }
+  .folio-chart-tooltip {
+    max-width: 250px;
+    padding: 9px 11px;
+    font-size: 9px;
+  }
+  .folio-chart-tooltip li {
+    font-size: 8px;
+  }
+}
+.folio-benchmark-comparison {
+  margin: 0 23px 13px;
+  overflow: auto;
+  border: 1px solid #e5eadc;
+  border-radius: 7px;
+}
+.folio-benchmark-comparison th {
+  font-size: 7px;
+  letter-spacing: 0.6px;
+  padding: 9px 11px;
+}
+.folio-benchmark-comparison td {
+  font-size: 9px;
+  padding: 10px 11px;
+  color: #7b8b6e;
+}
+.folio-benchmark-comparison th:first-child,
+.folio-benchmark-comparison td:first-child {
+  padding-left: 12px;
+}
+.folio-benchmark-comparison td > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.folio-benchmark-comparison td b {
+  font-weight: 500;
+  color: #647d56;
+}
+.folio-benchmark-comparison td small {
+  font-size: 8px;
+  color: #a2ac95;
+}
+.folio-benchmark-comparison td i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.folio-benchmark-comparison td button {
+  display: flex;
+  padding: 0;
+  color: #a0ac94;
+}
+.folio-benchmark-comparison .portfolio-comparison-row {
+  background: #f8faf3;
+}
+.folio-benchmark-comparison .benchmark-status-row td {
+  font-size: 9px;
+  color: #b09258;
+  background: #fbf8ef;
+  white-space: normal;
+  line-height: 1.6;
+  padding-top: 5px;
+  padding-bottom: 7px;
+}
+.folio-benchmark-comparison > p {
+  font-size: 8px;
+  line-height: 1.7;
+  color: #a2ac97;
+  padding: 9px 12px;
+  margin: 0;
+  border-top: 1px solid #edf1e7;
+  min-width: 410px;
+}
+.benchmark-tooltip-source {
+  font-size: 8px !important;
+  color: #a3ad98 !important;
+}
+@media (max-width: 600px) {
+  .folio-benchmark-comparison {
+    margin: 0 15px 12px;
+  }
+}

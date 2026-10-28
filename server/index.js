@@ -2,7 +2,12 @@ import http from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { resolve, extname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createMarketService } from "./market.js";
+import { createMarketService, validateRequest } from "./market.js";
+import { createCatalogService, validateBenchmarks } from "./catalog.js";
+import {
+  createCompanyUpdatesService,
+  validateCompanyUpdatesRequest,
+} from "./news.js";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const dev = process.argv.includes("--dev");
 const portArg = process.argv.indexOf("--port");
@@ -10,6 +15,8 @@ const port = Number(
   process.env.PORT || (portArg >= 0 ? process.argv[portArg + 1] : 5173),
 );
 const market = createMarketService();
+const catalog = createCatalogService(market);
+const companyUpdates = createCompanyUpdatesService();
 const vite = dev
   ? await (
       await import("vite")
@@ -26,9 +33,43 @@ const json = (res, status, value) => {
 let active = 0;
 const server = http.createServer(async (req, res) => {
   try {
-    if (req.url?.split("?")[0] === "/api/market") {
+    const pathname = req.url?.split("?")[0];
+    if (pathname === "/api/search") {
+      if (req.method !== "GET") return json(res, 405, { error: "Użyj GET." });
+      const query = new URL(req.url, "http://localhost").searchParams.get("q");
+      if (!query?.trim() || query.length > 80)
+        return json(res, 400, {
+          error: "Wpisz nazwę lub symbol (do 80 znaków).",
+        });
+      if (active >= 6)
+        return json(res, 429, {
+          error: "Zbyt wiele zapytań. Spróbuj ponownie za chwilę.",
+        });
+      active++;
+      try {
+        return json(res, 200, await catalog.search(query));
+      } catch (e) {
+        return json(res, 502, { error: e.message });
+      } finally {
+        active--;
+      }
+    }
+    const postRoutes = {
+      "/api/market": {
+        validate: validateRequest,
+        run: (body) => market.getMarket(body),
+      },
+      "/api/benchmarks": {
+        validate: validateBenchmarks,
+        run: (body) => catalog.getBenchmarks(body),
+      },
+      "/api/company-updates": {
+        validate: validateCompanyUpdatesRequest,
+        run: (body) => companyUpdates.getUpdates(body),
+      },
+    };
+    if (Object.hasOwn(postRoutes, pathname)) {
       if (req.method !== "POST") return json(res, 405, { error: "Użyj POST." });
-      // Browser requests must come from this app, not an unrelated website.
       if (
         req.headers.origin &&
         req.headers.origin !== `http://${req.headers.host}` &&
@@ -46,22 +87,21 @@ const server = http.createServer(async (req, res) => {
       let body;
       try {
         body = JSON.parse(raw);
-      } catch {
-        return json(res, 400, { error: "Nieprawidłowy JSON." });
-      }
-      const { validateRequest } = await import("./market.js");
-      try {
-        validateRequest(body);
+        postRoutes[pathname].validate(body);
       } catch (e) {
-        return json(res, 400, { error: e.message });
+        return json(res, 400, {
+          error: e instanceof SyntaxError ? "Nieprawidłowy JSON." : e.message,
+        });
       }
-      if (active >= 4)
+      if (active >= 6)
         return json(res, 429, {
           error: "Trwa pobieranie danych. Spróbuj ponownie za chwilę.",
         });
       active++;
       try {
-        return json(res, 200, await market.getMarket(body));
+        return json(res, 200, await postRoutes[pathname].run(body));
+      } catch (e) {
+        return json(res, 502, { error: e.message });
       } finally {
         active--;
       }

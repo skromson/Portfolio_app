@@ -98,12 +98,15 @@ test("new cash deposit is not a return; price change still is", () => {
   near(p.history[2].value, 760);
   near(p.history[2].percent, (760 / 600 - 1) * 100);
 });
-test("future prices and FX never backfill history; missing live quotes block totals", () => {
+test("missing historical quotes use marked transaction-cost estimates, never future prices; missing live quotes still block totals", () => {
   const d = data();
   d.instruments["TEST.US"].history = [{ day: "2025-01-03", close: 40 }];
   const p = onlinePortfolio([a], d);
-  assert.equal(p.history[1].value, null);
-  assert.equal(p.history[2].percent, null);
+  near(p.history[1].value, 400);
+  assert.equal(p.history[1].estimated, true);
+  assert.match(p.history[1].estimates[0].source, /Koszt otwarcia/);
+  near(p.history[2].percent, 56.25);
+  assert.equal(p.history[2].estimatedReturn, true);
   d.instruments["TEST.US"] = { error: "unavailable" };
   assert.ok(onlinePortfolio([a], d).missing.some((e) => e.includes("TEST.US")));
 });
@@ -160,4 +163,119 @@ test("return can be rebased to a selected interval after a historical gap", asyn
   );
   near(result[0].percent, 0);
   near(result.at(-1).percent, 20);
+});
+
+test("daily operations include trades and native amounts; selected-account transfers are excluded from boundary return flow", () => {
+  const pln = {
+    ...a,
+    id: "100",
+    currency: "PLN",
+    holdings: [],
+    lots: [],
+    operations: [
+      { type: "Deposit", amount: 100, time: "2025-01-01T10:00:00Z" },
+      {
+        type: "Transfer",
+        amount: -50,
+        time: "2025-01-02T10:00:00Z",
+        comment:
+          "Currency conversion, PLN to EUR from TA: 100 to: 200, Exchange rate:0.25",
+      },
+    ],
+  };
+  const eur = {
+    ...pln,
+    id: "200",
+    currency: "EUR",
+    operations: [
+      {
+        type: "Transfer",
+        amount: 12.5,
+        time: "2025-01-02T10:00:00Z",
+        comment:
+          "Currency conversion, PLN to EUR from TA: 100 to: 200, Exchange rate:0.25",
+      },
+    ],
+  };
+  const together = onlinePortfolio([pln, eur], data());
+  near(together.history[1].flow, 0);
+  near(together.history[1].percent, 0);
+  assert.equal(together.history[1].flows.length, 2);
+  assert.ok(together.history[1].flows.every((o) => o.internal));
+  near(together.history[1].flows.find((o) => o.currency === "EUR").amount, 50);
+  near(
+    together.history[1].flows.find((o) => o.currency === "EUR").nativeAmount,
+    12.5,
+  );
+  const alone = onlinePortfolio([pln], data());
+  near(alone.history[1].flow, -50);
+  assert.equal(alone.history[1].flows[0].internal, false);
+});
+test("IKE transfers are matched as a unique pair without needing counterpart IDs in comments", () => {
+  const source = {
+    ...a,
+    id: "100",
+    currency: "PLN",
+    holdings: [],
+    lots: [],
+    operations: [
+      { type: "Deposit", amount: 100, time: "2025-01-01T10:00:00Z" },
+      {
+        type: "IKE deposit",
+        amount: -50,
+        time: "2025-01-02T10:00:00Z",
+        comment: "Transfer out operation on account with id 100",
+      },
+    ],
+  };
+  const ike = {
+    ...source,
+    id: "200",
+    operations: [
+      {
+        type: "IKE deposit",
+        amount: 50,
+        time: "2025-01-02T10:00:00.010Z",
+        comment: "Transfer in operation on account with id 200",
+      },
+    ],
+  };
+  const p = onlinePortfolio([source, ike], data());
+  near(p.history[1].flow, 0);
+  assert.ok(p.history[1].flows.every((o) => o.internal));
+});
+test("an irreparable daily gap does not permanently truncate later percentage points", () => {
+  const d = data();
+  d.instruments["TEST.US"].history = [{ day: "2025-01-03", close: 40 }];
+  const unknown = { ...a, lots: [{ ...a.lots[0], cost: undefined }] };
+  const p = onlinePortfolio([unknown], d);
+  assert.equal(p.history[1].value, null);
+  near(p.history[2].percent, 56.25);
+  assert.equal(p.history[2].estimatedReturn, true);
+  assert.ok(p.history[2].returnEstimates.length);
+});
+test("a peer mentioned in the comment alone does not erase a transfer when the matching ledger entry is missing", () => {
+  const source = {
+    ...a,
+    id: "100",
+    currency: "PLN",
+    holdings: [],
+    lots: [],
+    operations: [
+      { type: "Deposit", amount: 100, time: "2025-01-01T10:00:00Z" },
+      {
+        type: "Transfer",
+        amount: -50,
+        time: "2025-01-02T10:00:00Z",
+        comment: "from TA: 100 to: 200",
+      },
+    ],
+  };
+  const peer = { ...source, id: "200", operations: [] };
+  const p = onlinePortfolio([source, peer], data());
+  near(p.history[1].flow, -50);
+  near(p.history[1].percent, 0);
+  assert.equal(p.history[1].flows[0].internal, false);
+  assert.equal(p.history[1].estimated, true);
+  assert.ok(p.warnings.some((w) => w.includes("drugiej strony")));
 });
